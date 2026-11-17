@@ -6,9 +6,24 @@
   "scripts": {
     "phase0": "ts-node src/phase0-test.ts --",
     "start": "ts-node src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "seed": "ts-node src/db/seed.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "ts-node src/agent/parser.test.ts",
+    "build": "tsc && pkg . --targets node22-win-x64 --output dist/itaca-agent.exe"
+  },
+  "bin": "dist/index.js",
+  "pkg": {
+    "scripts": [
+      "dist/**/*.js"
+    ],
+    "assets": [
+      "node_modules/better-sqlite3/lib/**/*",
+      "node_modules/better-sqlite3/prebuilds/win32-x64.node"
+    ]
   },
   "dependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "better-sqlite3": "^13.2.0",
     "express": "^5.3.0",
     "soundcraft-ui-connection": "7.1.0",
     "ws": "^8.22.2"
@@ -17,6 +32,7 @@
     "@types/express": "^5.0.6",
     "@types/node": "^20.14.0",
     "@types/ws": "^8.18.2",
+    "@yao-pkg/pkg": "^6.25.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.6.3"
   }
