@@ -8,3 +8,4 @@ dist/
 err.txt
 out.txt
 .env
+models/
