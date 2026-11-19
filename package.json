@@ -6,6 +6,8 @@
   "scripts": {
     "phase0": "ts-node src/phase0-test.ts --",
     "start": "ts-node src/index.ts",
+    "demo": "ts-node src/index.ts --demo",
+    "test": "node --test -r ts-node/register src/manager/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

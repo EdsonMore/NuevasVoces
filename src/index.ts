@@ -1,43 +1,25 @@
-import { parseCommand } from './agent/parser';
+import { DEMO_MODE } from './config';
+import { createDemoMixer, liveMixer } from './console/controller';
+import { createRepository } from './manager/repository';
+import { SoundManager } from './manager/service';
 import { startUiServer } from './ui/server';
-import { applyGain, ConsoleConnectionError } from './console/controller';
 
-async function handleText(text: string, broadcast: ReturnType<typeof startUiServer>['broadcast']): Promise<void> {
-  broadcast({ type: 'transcript', text });
-  const action = parseCommand(text);
-  if (!action) {
-    broadcast({ type: 'status', message: `No se entendió el comando: "${text}"` });
-    return;
-  }
-  broadcast({ type: 'action', action });
-
-  console.log(`[consola] Aplicando ganancia al canal ${action.channel}: ${action.value} dB`);
-  try {
-    await applyGain(action.channel, action.value);
-    console.log('[consola] Ganancia aplicada con éxito');
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error('[consola] Error aplicando ganancia:', message);
-    if (err instanceof ConsoleConnectionError) {
-      broadcast({ type: 'status', message: 'Error: La consola no está conectada o apagada.' });
-    } else {
-      broadcast({ type: 'status', message: `Error en consola: ${message}` });
-    }
-  }
+async function main(): Promise<void> {
+  const mixer = DEMO_MODE ? createDemoMixer() : liveMixer;
+  const repository = await createRepository(mixer.mode);
+  const manager = new SoundManager(repository, mixer);
+  await manager.view();
+  const server = startUiServer(manager);
+  server.on('error', (error) => {
+    console.error('[ui]', error.message);
+    process.exit(1);
+  });
+  console.log('[gestor] Modo ' + mixer.mode + ' · almacenamiento ' + repository.kind);
 }
 
-function main(): void {
-  const { broadcast } = startUiServer({
-    onStartListening(): void {
-      broadcast({ type: 'status', message: 'Escuchando...' });
-    },
-    onStopListening(): void {
-      broadcast({ type: 'status', message: 'Detenido.' });
-    },
-    onTextCommand(text): void {
-      handleText(text, broadcast);
-    },
+if (require.main === module) {
+  void main().catch((error) => {
+    console.error('[inicio]', error.message);
+    process.exit(1);
   });
 }
-
-main();

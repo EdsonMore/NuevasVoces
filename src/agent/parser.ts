@@ -1,24 +1,179 @@
+import { DEFAULT_CHANNEL } from '../config';
+
 export interface SetGainCommand {
   action: 'SET_GAIN';
   channel: number;
   value: number;
 }
 
-// Patrones MVP: "sube/baja el canal N a X dB", "pon el canal N en X[ dB]"
-const PATTERNS: RegExp[] = [
-  /\b(?:sube|baja)\s+el\s+canal\s+(\d+)\s+a\s+(-?\d+(?:[.,]\d+)?)\s*(?:db)?\b/i,
-  /\bpon\s+el\s+canal\s+(\d+)\s+en\s+(-?\d+(?:[.,]\d+)?)\s*(?:db)?\b/i,
-];
+export interface AdjustGainCommand {
+  action: 'ADJUST_GAIN';
+  channel: number;
+  delta: number;
+}
 
-export function parseCommand(text: string): SetGainCommand | null {
-  const normalized = text.trim().toLowerCase();
-  for (const pattern of PATTERNS) {
-    const match = normalized.match(pattern);
-    if (match) {
-      const channel = parseInt(match[1], 10);
-      const value = parseFloat(match[2].replace(',', '.'));
-      return { action: 'SET_GAIN', channel, value };
-    }
+type GainValue =
+  | Omit<SetGainCommand, 'channel'>
+  | Omit<AdjustGainCommand, 'channel'>;
+
+export type GainCommand = SetGainCommand | AdjustGainCommand;
+
+export interface ParseContext {
+  defaultChannel?: number;
+  aliases?: { name: string; channel: number }[];
+}
+
+type Verb = 'set' | 'increase' | 'decrease' | 'give';
+
+const VERBS = new Map<string, Verb>([
+  ['ajusta', 'set'], ['ajustale', 'set'], ['ajustar', 'set'],
+  ['pon', 'set'], ['ponle', 'set'], ['poner', 'set'],
+  ['deja', 'set'], ['dejale', 'set'], ['dejar', 'set'],
+  ['fija', 'set'], ['fijale', 'set'], ['fijar', 'set'],
+  ['sube', 'increase'], ['subele', 'increase'], ['subir', 'increase'],
+  ['aumenta', 'increase'], ['aumentale', 'increase'], ['aumentar', 'increase'],
+  ['incrementa', 'increase'], ['incrementar', 'increase'],
+  ['eleva', 'increase'], ['elevar', 'increase'],
+  ['baja', 'decrease'], ['bajale', 'decrease'], ['bajar', 'decrease'],
+  ['reduce', 'decrease'], ['reducelo', 'decrease'], ['reducir', 'decrease'],
+  ['disminuye', 'decrease'], ['disminuir', 'decrease'],
+  ['quita', 'decrease'], ['quitar', 'decrease'],
+  ['da', 'give'], ['dale', 'give'], ['dar', 'give'], ['darle', 'give'],
+]);
+
+const ORDINALS = new Map<string, number>([
+  ['primer', 1], ['primero', 1], ['segundo', 2], ['tercer', 3], ['tercero', 3],
+  ['cuarto', 4], ['quinto', 5], ['sexto', 6], ['septimo', 7], ['octavo', 8],
+  ['noveno', 9], ['decimo', 10], ['undecimo', 11], ['decimoprimero', 11],
+  ['duodecimo', 12], ['decimosegundo', 12], ['decimotercero', 13],
+  ['decimocuarto', 14], ['decimoquinto', 15], ['decimosexto', 16],
+  ['decimoseptimo', 17], ['decimoctavo', 18], ['decimonoveno', 19], ['vigesimo', 20],
+]);
+
+const UNITS = ['cero', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve'];
+const CARDINALS = new Map<string, number>([
+  ...UNITS.map((word, value): [string, number] => [word, value]),
+  ...[
+    'diez', 'once', 'doce', 'trece', 'catorce', 'quince', 'dieciseis', 'diecisiete',
+    'dieciocho', 'diecinueve', 'veinte', 'veintiuno', 'veintidos', 'veintitres',
+    'veinticuatro', 'veinticinco', 'veintiseis', 'veintisiete', 'veintiocho', 'veintinueve',
+  ].map((word, index): [string, number] => [word, index + 10]),
+  ['un', 1],
+]);
+
+for (const [index, tens] of ['treinta', 'cuarenta', 'cincuenta', 'sesenta', 'setenta', 'ochenta', 'noventa'].entries()) {
+  const base = (index + 3) * 10;
+  CARDINALS.set(tens, base);
+  for (const [unit, word] of UNITS.entries()) {
+    if (unit > 0) CARDINALS.set(tens + ' y ' + word, base + unit);
   }
-  return null;
+}
+
+// Las expresiones cualitativas tienen una magnitud explícita, en dB.
+const RELATIVE_AMOUNTS = new Map<string, number>([
+  ['un poco', 1], ['un poquito', 1], ['ligeramente', 1],
+]);
+const DIRECTIONS = new Map<string, number>([['mas', 1], ['menos', -1]]);
+
+const ordinalWords = [...ORDINALS.keys()].sort((a, b) => b.length - a.length).join('|');
+const channelNumbers = [...CARDINALS.keys()].sort((a, b) => b.length - a.length).join('|');
+const CHANNEL_PATTERN =
+  '(?:^|\\s)(?:(?:para el|a el|en el|el|al|del|de|a|en)\\s+)?' +
+  '(?:canal\\s+(?:numero\\s+)?(\\d+(?:[oa])?|' + ordinalWords + '|' + channelNumbers + ')|' +
+  '(' + ordinalWords + ')\\s+canal)(?=\\s|$)';
+
+function normalize(text: string): string {
+  return text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+    .replace(/\.?[º°]/g, 'o').replace(/\.?ª/g, 'a').replace(/−/g, '-')
+    .replace(/^[\s¿¡]+|[\s.!?]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/^por favor(?: *,)? |(?: *,)? por favor$/g, '')
+    .replace(/^(?:puedes|podrias) /, '');
+}
+
+function parseDb(text: string): number | null {
+  const amount = text.replace(/\s*(?:d\s?b|decibel(?:es|ios?)?)$/, '')
+    .replace(/^menos /, '-').replace(/^mas /, '+');
+
+  if (/^[+-]?\d+(?:[.,]\d+)?$/.test(amount)) {
+    const value = Number(amount.replace(',', '.'));
+    return Number.isFinite(value) ? value : null;
+  }
+
+  const unsigned = amount.replace(/^[+-]/, '');
+  const sign = amount.startsWith('-') ? -1 : 1;
+  const [whole, fraction, extra] = unsigned.split(/ (?:coma|punto) /);
+  const integer = /^\d+$/.test(whole) ? Number(whole) : CARDINALS.get(whole);
+  if (integer === undefined || !Number.isFinite(integer) || extra !== undefined) return null;
+  if (fraction === undefined) return sign * integer;
+
+  const decimalDigits = /^\d+$/.test(fraction) ? fraction : CARDINALS.get(fraction);
+  return decimalDigits === undefined ? null : sign * (integer + Number('0.' + decimalDigits));
+}
+
+function extractTarget(text: string, context: ParseContext): { channel: number; remainder: string } | null {
+  const matches = (context.aliases ?? []).filter(({ name }) => {
+    const alias = normalize(name);
+    return alias && (' ' + text + ' ').includes(' ' + alias + ' ');
+  });
+  if (matches.length > 1) return null;
+  if (matches.length === 1) {
+    const alias = normalize(matches[0].name);
+    const escaped = alias.replace(/[.*+?^$()|[\]{}\\]/g, '\\$&');
+    text = text.replace(new RegExp('(?:^|\\s)(?:(?:a|de|para)\\s+)?' + escaped + '(?=\\s|$)'), ' canal ' + matches[0].channel);
+  }
+  const targets = [...text.matchAll(new RegExp(CHANNEL_PATTERN, 'g'))];
+  if (targets.length > 1) return null;
+  const target = targets[0];
+  if (!target) return { channel: context.defaultChannel ?? DEFAULT_CHANNEL, remainder: text };
+
+  const token = target[1] ?? target[2];
+  const channel = ORDINALS.get(token) ?? CARDINALS.get(token) ?? Number(token.replace(/[oa]$/, ''));
+  if (!Number.isSafeInteger(channel) || channel < 1) return null;
+
+  const start = target.index!;
+  const remainder = (text.slice(0, start) + ' ' + text.slice(start + target[0].length)).replace(/\s+/g, ' ').trim();
+  return { channel, remainder };
+}
+
+function extractValue(text: string, verb: Verb): GainValue | null {
+  const verbDirection = verb === 'increase' ? 1 : verb === 'decrease' ? -1 : undefined;
+  const absolute = text.match(/^(?:a|en) (.+)$/);
+  if (absolute && (text.startsWith('a ') || verbDirection === undefined)) {
+    const value = parseDb(absolute[1]);
+    return value === null ? null : { action: 'SET_GAIN', value };
+  }
+
+  const amount = text.replace(/^en /, '');
+  const suffix = amount.match(/^(.+) (mas|menos)$/);
+  const prefix = verb === 'give' ? amount.match(/^(mas|menos) (.+)$/) : null;
+  const directionWord = suffix?.[2] ?? prefix?.[1];
+  const explicitDirection = directionWord ? DIRECTIONS.get(directionWord) : undefined;
+  if (verbDirection !== undefined && explicitDirection !== undefined && verbDirection !== explicitDirection) return null;
+
+  const direction = explicitDirection ?? verbDirection;
+  if (direction !== undefined) {
+    const quantity = suffix?.[1] ?? prefix?.[2] ?? amount;
+    const magnitude = RELATIVE_AMOUNTS.get(quantity) ?? parseDb(quantity);
+    return magnitude === null || magnitude < 0 ? null : { action: 'ADJUST_GAIN', delta: direction * magnitude };
+  }
+
+  const value = verb === 'set' ? parseDb(text) : null;
+  return value === null ? null : { action: 'SET_GAIN', value };
+}
+
+export function parseCommand(text: string, context: ParseContext = {}): GainCommand | null {
+  const command = normalize(text).match(/^(\w+) (.+)$/);
+  if (!command) return null;
+  const verb = VERBS.get(command[1]);
+  if (!verb) return null;
+
+  const target = extractTarget(command[2], context);
+  if (!target) return null;
+
+  // El valor debe consumir toda la frase restante. Así se rechazan objetivos
+  // desconocidos, cantidades ambiguas e instrucciones adicionales.
+  const amount = target.remainder.replace(/\b(?:(?:de )?(?:la )?)ganancia\b/, '').replace(/\s+/g, ' ').trim();
+  const value = extractValue(amount, verb);
+  return value && { ...value, channel: target.channel };
 }

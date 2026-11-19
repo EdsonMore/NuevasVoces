@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111715">
+  <title>Ítaca · Control de sonido</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Ítaca, inicio">ÍTACA<span>SONIDO EN ESCENA</span></a>
+    <div class="connection"><span class="dot"></span><span id="connection">Conectando con el gestor…</span><span id="mode" class="badge"></span></div>
+  </header>
+  <main>
+    <section class="page-heading">
+      <div><p class="eyebrow">CLUB DE ARTE Y CULTURA</p><h1>La obra, bajo control.</h1></div>
+    </section>
+    <section class="show-context" aria-label="Selección y gestión de obras">
+      <div class="show-context-bar">
+        <div class="selected-show">
+          <p class="show-caption">Obra seleccionada</p>
+          <h2 id="selected-show-name">Selecciona una obra</h2>
+        </div>
+        <div class="show-context-actions">
+          <button type="button" id="change-show" aria-expanded="false" aria-controls="show-picker">Cambiar obra</button>
+          <button type="button" id="manage-shows" class="secondary" aria-expanded="false" aria-controls="show-settings">Gestionar obras</button>
+        </div>
+      </div>
+      <div class="show-picker" id="show-picker" hidden>
+        <label for="show-select">Selecciona una obra</label>
+        <select id="show-select"><option value="">Selecciona una obra</option></select>
+      </div>
+      <div class="show-settings" id="show-settings" hidden>
+        <div class="settings-row">
+          <form id="show-create"><label>Nueva obra<input name="name" required maxlength="100" placeholder="Nombre de la obra"></label><button class="secondary">Crear obra</button></form>
+          <form id="show-rename"><label>Nombre de la obra seleccionada<input name="name" required maxlength="100"></label><button class="secondary">Renombrar</button><button type="button" id="show-delete" class="danger-text">Eliminar obra</button></form>
+        </div>
+      </div>
+    </section>
+    <div id="notice" role="status" aria-live="polite" hidden></div>
+    <section id="welcome" class="empty welcome" hidden>
+      <p class="eyebrow">EMPIEZA POR TU OBRA</p><h2>Prepara el mapa de sonido.</h2>
+      <p>Crea una obra y asigna sus actores y micrófonos a los canales de la Ui24R.</p>
+      <button id="welcome-create">Crear la primera obra</button>
+    </section>
+    <div id="workspace" hidden>
+      <nav class="tabs" aria-label="Pasos para preparar y operar la obra">
+        <button class="selected" data-tab="channels"><span class="step-number" aria-hidden="true">1</span><span>Mapa de canales</span></button>
+        <button data-tab="scenes"><span class="step-number" aria-hidden="true">2</span><span>Escenas</span></button>
+        <button data-tab="operation"><span class="step-number" aria-hidden="true">3</span><span>Operación</span></button>
+        <button data-tab="history"><span class="step-number" aria-hidden="true">4</span><span>Historial <span id="history-count"></span></span></button>
+      </nav>
+
+      <section id="operation" class="tab-panel" hidden>
+        <div class="operation-grid">
+          <div class="stack">
+            <section class="card command-card">
+              <div class="card-heading"><div><p class="eyebrow">AGENTE DE VOZ</p><h2>Propón un ajuste.</h2></div><span class="badge subtle">Ganancia de entrada</span></div>
+              <form id="command-form">
+                <label for="command-text">Instrucción por voz o texto</label>
+                <textarea id="command-text" required rows="3" maxlength="300" placeholder="Sube un poco la ganancia de Ana"></textarea>
+                <div class="command-actions"><button id="listen" class="secondary" type="button">Activar micrófono</button><button id="propose-command">Crear propuesta <span aria-hidden="true">↗</span></button></div>
+              </form>
+              <p class="hint" id="voice-hint">«Un poco» equivale a 1 dB. Al omitir el canal se utiliza el canal 2.</p>
+            </section>
+            <section class="card proposal-area">
+              <div class="card-heading"><div><p class="eyebrow">REVISIÓN DEL TÉCNICO</p><h2>Cambios pendientes</h2></div><span id="pending-count" class="count">0</span></div>
+              <div id="proposals"></div>
+            </section>
+          </div>
+          <aside class="card guide-card">
+            <div class="card-heading"><div><p class="eyebrow">MODO GUÍA</p><h2>En escena</h2></div><button id="guide-expand" type="button" class="text-button">Ampliar</button></div>
+            <p id="active-scene" class="active-scene">Ninguna escena aplicada</p>
+            <label for="guide-select">Escena a preparar</label><select id="guide-select"></select>
+            <div id="guide-content"></div>
+            <div class="guide-nav"><button class="secondary" type="button" id="scene-prev">← Anterior</button><button class="secondary" type="button" id="scene-next">Siguiente →</button></div>
+            <button id="propose-scene" class="full-width">Revisar cambios de escena</button>
+            <p class="hint">Cada escena se aplica después de tu confirmación.</p>
+          </aside>
+        </div>
+        <div class="step-actions">
+          <button class="secondary" type="button" data-go-tab="scenes">← Volver a escenas</button>
+          <button type="button" data-go-tab="history">Consultar historial →</button>
+        </div>
+      </section>
+
+      <section id="channels" class="tab-panel">
+        <div class="section-heading"><div><h2>Mapa de canales</h2><p>Asigna cada entrada y define el rango permitido para la obra.</p></div><button id="read-gains" class="secondary">Leer ganancias actuales</button></div>
+        <section class="card"><div class="table-scroll"><table><thead><tr><th>Canal</th><th>Actor</th><th>Micrófono</th><th>Límites (dB)</th><th>Actual (dB)</th><th>Acciones</th></tr></thead><tbody id="channel-rows"></tbody></table></div></section>
+        <section class="card editor"><h3 id="channel-form-title">Asignar un canal</h3>
+          <form id="channel-form" class="fields">
+            <label>Canal<input name="channel" type="number" min="1" max="20" required value="2"></label>
+            <label>Actor<input name="actor" required maxlength="100" placeholder="Ana"></label>
+            <label>Micrófono<input name="microphone" required maxlength="100" placeholder="Diadema 02"></label>
+            <label>Mínimo (dB)<input name="minGain" type="number" min="-6" max="57" step="0.1" required value="-6"></label>
+            <label>Máximo (dB)<input name="maxGain" type="number" min="-6" max="57" step="0.1" required value="20"></label>
+            <div class="form-actions"><button>Guardar asignación</button><button type="button" id="channel-reset" class="secondary">Limpiar</button></div>
+          </form>
+        </section>
+        <div class="step-actions step-actions-forward">
+          <button type="button" data-go-tab="scenes">Continuar a escenas →</button>
+        </div>
+      </section>
+
+      <section id="scenes" class="tab-panel" hidden>
+        <div class="section-heading"><div><h2>Escenas de la obra</h2><p>Guarda las ganancias objetivo y las indicaciones del ensayo.</p></div><button id="new-scene" class="secondary">Nueva escena</button></div>
+        <div class="scenes-grid"><section class="card"><div id="scene-list"></div></section>
+          <section class="card editor"><h3 id="scene-form-title">Crear escena</h3>
+            <form id="scene-form">
+              <label>Nombre<input name="name" required maxlength="100" placeholder="Apertura"></label>
+              <label>Indicaciones<textarea name="notes" rows="2" maxlength="300" placeholder="Entrada de los actores…"></textarea></label>
+              <p class="hint">Selecciona los canales incluidos y sus ganancias objetivo.</p>
+              <div id="scene-gains"></div>
+              <button id="save-scene">Guardar escena</button>
+            </form>
+          </section>
+        </div>
+        <div class="step-actions">
+          <button class="secondary" type="button" data-go-tab="channels">← Volver a canales</button>
+          <button type="button" data-go-tab="operation">Continuar a operación →</button>
+        </div>
+      </section>
+
+      <section id="history" class="tab-panel" hidden>
+        <div class="section-heading"><div><h2>Registro de operaciones</h2><p>Propuestas, decisiones y resultados de esta obra.</p></div></div>
+        <section class="card"><div id="history-list"></div></section>
+        <div class="step-actions">
+          <button class="secondary" type="button" data-go-tab="operation">← Volver a operación</button>
+        </div>
+      </section>
+    </div>
+    <footer><span>Ítaca · Gestor de sonido</span><span id="storage-label">Servidor local</span></footer>
+  </main>
+  <dialog id="delete-dialog"><form method="dialog"><h2 id="delete-title">Eliminar elemento</h2><p id="delete-message"></p><div class="form-actions"><button value="cancel" class="secondary">Cancelar</button><button id="delete-confirm" value="confirm" class="danger">Eliminar</button></div></form></dialog>
+</body>
+</html>
