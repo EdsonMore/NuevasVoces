@@ -1,11 +1,4 @@
-node_modules/
-dist/
-*.db
-*.db-shm
-*.db-wal
-*.exe
-*.log
-err.txt
-out.txt
+.data/
 .env
-models/
+dist/
+*.log
