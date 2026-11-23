@@ -64,7 +64,7 @@ export async function aplicarEscena(escenaId: number): Promise<void> {
     .prepare('SELECT canal_hw, gain_db, mute FROM canales WHERE escena_id = ?')
     .all(escenaId) as CanalEscena[];
   for (const canal of canales) {
-    await applyGain(canal.canal_hw, canal.gain_db);
+    await applyGain({ action: 'SET_GAIN', channel: canal.canal_hw, value: canal.gain_db });
     await applyMute(canal.canal_hw, canal.mute === 1);
   }
 }

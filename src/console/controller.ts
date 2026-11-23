@@ -10,6 +10,8 @@ const GAIN_LIMITS = new Map([
   ['ui16', { channels: DEVICE_CAPABILITIES.ui16.input, min: -40, max: 50 }],
   ['ui24', { channels: 20, min: -6, max: 57 }],
 ]);
+const MIN_MASTER_DB = -20;
+const MAX_MASTER_DB = 10;
 
 export class ConsoleConnectionError extends Error {}
 

@@ -1,4 +1,12 @@
+node_modules/
 .data/
 .env
 dist/
+*.db
+*.db-shm
+*.db-wal
+*.exe
 *.log
+err.txt
+out.txt
+models/

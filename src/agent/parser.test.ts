@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { parseCommand } from './parser';
+import { parseExtraCommand as parseCommand } from './parser';
 
 assert.deepStrictEqual(parseCommand('Mutea el canal 3'), { action: 'SET_MUTE', channel: 3, value: true });
 assert.deepStrictEqual(parseCommand('Desmutea el canal 2'), { action: 'SET_MUTE', channel: 2, value: false });

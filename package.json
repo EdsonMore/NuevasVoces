@@ -7,8 +7,20 @@
     "phase0": "ts-node src/phase0-test.ts --",
     "start": "ts-node src/index.ts",
     "demo": "ts-node src/index.ts --demo",
-    "test": "node --test -r ts-node/register src/manager/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "seed": "ts-node src/db/seed.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test -r ts-node/register src/manager/*.test.ts && ts-node src/agent/parser.test.ts",
+    "build": "tsc && pkg . --targets node22-win-x64 --output dist/itaca-agent.exe"
+  },
+  "bin": "dist/index.js",
+  "pkg": {
+    "scripts": [
+      "dist/**/*.js"
+    ],
+    "assets": [
+      "node_modules/better-sqlite3/lib/**/*",
+      "node_modules/better-sqlite3/prebuilds/win32-x64.node"
+    ]
   },
   "dependencies": {
     "@types/better-sqlite3": "^9.6.0",
